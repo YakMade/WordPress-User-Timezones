@@ -4,7 +4,7 @@ Plugin Name: User Timezones
 Plugin URI: https://github.com/YakMade/WordPress-User-Timezones
 Description: Add timezone settings to users in Wordpress, allowing users to work in their local timezone on a multi-user install.
 Author: Andrew Saturn, Yak
-Version: 0.1
+Version: 0.2
 Author URI: https://yakmade.com
 */
 
@@ -22,12 +22,12 @@ function yak_set_user_meta_subpanel() {
 		switch($_POST['action']) {
 			case 'setUserMeta':
 				if(!isset($_POST['local_timezone']) || $_POST['local_timezone'] == "") {
-					$message = 'Please specify a timezone.';
+					$message = 'Please select a timezone.';
 					$class = 'notice-error';
 					break;
 				}
 
-				$message = 'Timezone set.';
+				$message = 'Local timezone set.';
 				$class = 'notice-success';
 				/* set it */
 				update_user_meta($user_id, 'local_timezone', $_POST['local_timezone']);
@@ -63,8 +63,8 @@ function yak_set_user_meta_subpanel() {
 							<input type="hidden" name="action" value="setUserMeta" />
 
 							<script type='text/javascript'>
-							/* set current timezone as selected */
-							  $(document).ready(function() {
+							<?php /* set current timezone as selected */ ?>
+							  jQuery(document).ready(function ($) {
 									$("#local_timezone option[value='<?php echo get_user_meta($user_id, 'local_timezone', true); ?>']").prop('selected', true).addClass('selected');
 							  });
 							</script>
@@ -75,11 +75,11 @@ function yak_set_user_meta_subpanel() {
 							</style>
 
 							<select name="local_timezone" id="local_timezone">
-								<option value="" disabled>Select a timezone</option>
+								<option value="">Select a timezone</option>
 								<?php
 									$tzlist = DateTimeZone::listIdentifiers(DateTimeZone::ALL);
-									foreach ($tzlist as $timezone) {
-										if($timezone != "UTC") { echo '<option value="' . $timezone . '">' . $timezone . '</option>'; }
+									foreach ($tzlist as $timezone_list_item) {
+										if($timezone_list_item != "UTC") { echo '<option value="' . $timezone_list_item . '">' . $timezone_list_item . '</option>'; }
 									}
 								?>
 							</select>
@@ -87,16 +87,11 @@ function yak_set_user_meta_subpanel() {
 
 							/* show time comparison if set */
 							if(get_user_meta($user_id, 'local_timezone', false)) { // false returns true or false based on if it exists
-  							$tz = get_user_meta($user_id, 'local_timezone', true); // true returns value
+  							$user_tz_setting = get_user_meta($user_id, 'local_timezone', true); // true returns value
 
-                global $wpdb;
-                //$db_timezone = $wpdb->get_var("SELECT option_value FROM {$wpdb->prefix}options WHERE option_name = 'timezone_string'");
-
-                $wordpress_timezone = new DateTimeZone(get_option('timezone_string'));
-                //$wordpress_timezone = new DateTimeZone($db_timezone);
-
-                $user_timezone = new DateTimeZone($tz); /* create timezone based on user timezone setting */
-
+                // global $wpdb;
+                $wordpress_timezone = new DateTimeZone(wp_timezone_string());
+                $user_timezone = new DateTimeZone($user_tz_setting); /* create timezone based on user timezone setting */
                 $wordpress_time = new DateTime('now', $wordpress_timezone); /* timestamp based on wordpress timezone */
   							$user_time = new DateTime('now', $user_timezone); /* create "now" time based on user timezone */
 
@@ -106,11 +101,14 @@ function yak_set_user_meta_subpanel() {
 
 							?>
 							<p class="timezone-info">
-								<span id="local-time">Default time is <code><?php echo $wordpress_time->format('Y-m-d G:i:s'); ?></code>.</span>
-								<span id="user-time">Your local user time is <code><?php echo $user_time->format('Y-m-d G:i:s'); ?></code>.<br>
-                Your local timezone has a difference of <code><?php echo $diff->format('%r%H:%I'); ?></code> from the default timezone.</span>
+								<p><span id="local-time">Default local time is <?php echo wp_timezone_string(); ?> <code><?php echo $wordpress_time->format('Y-m-d G:i:s'); ?></code>.</span></p>
+								<p><span id="user-time">Your local user time is <?php echo $user_tz_setting; ?> <code><?php echo $user_time->format('Y-m-d G:i:s'); ?></code>.</p>
+                <p>Your local timezone has a difference of <code><?php echo $diff->format('%r%H:%I'); ?></code> from the default timezone.</span></p>
 							</p>
-						<?php } ?>
+						<?php } else {
+              /* no timezone setting for this user */
+              ?><p><em>No local timezone setting found for your user account.</em></p><?php
+            } ?>
 						</td>
 					</tr>
 
@@ -141,17 +139,17 @@ function yak_user_timezone($timezone) {
   }
 
   $timezone = get_user_meta($user_id, 'local_timezone', true);
-  if($timezone == "") {
-    /* set to default if it doesn't exist */
-    global $wpdb;
-    $timezone = $wpdb->get_var("SELECT option_value FROM {$wpdb->prefix}options WHERE option_name = 'timezone_string'");
+  if($timezone == '') {
+    // user local_timezone setting doesn't exist
+    return false;
+  } else {
+    return $timezone;
   }
-  return $timezone;
 }
 if(is_admin()) {
   global $pagenow;
-  /* prevent default timezone from being overridden on the general options page */
-  if(!in_array($pagenow, array('options-general.php'))) {
+  /* prevent default timezone from being overridden on the general options page and this user page */
+  if(!in_array($pagenow, array('options-general.php', 'users.php'))) {
     /* substitute timezone for user's timezone */
     add_filter('pre_option_timezone_string',  'yak_user_timezone');
   }
